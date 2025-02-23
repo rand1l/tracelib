@@ -1,4 +1,4 @@
-module github.com/kanocz/tracelib
+module 	github.com/rand1l/tracelib
 
 go 1.22
 

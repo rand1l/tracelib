@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"tracelib"
+	"github.com/rand1l/tracelib"
 )
 
 // printStep formats and prints trace results for each hop.

@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/kanocz/tracelib"
+	"tracelib"
 )
 
 type mtrhHost struct {
@@ -20,30 +20,48 @@ type mtrhHost struct {
 }
 
 func doTrace(host string) ([]byte, error) {
+	// Create a cache for lookups
 	cache := tracelib.NewLookupCache()
 
-	rawHops, err := tracelib.RunMultiTrace(host, "0.0.0.0", "::", time.Second, 64, cache, 10, nil)
-	if nil != err {
+	// Run the trace with the specified parameters
+	rawHops, err := tracelib.RunMultiTrace(
+		host,
+		"0.0.0.0",  // IPv4 source address
+		"::",        // IPv6 source address
+		time.Second, // Max RTT
+		64,          // Max TTL
+		cache,       // Cache for lookups
+		10,          // Number of rounds
+		nil,         // No callback
+		tracelib.ProtoTCP, // Use TCP protocol
+		80,          // Target port (for TCP)
+	)
+	if err != nil {
 		return nil, err
 	}
+
+	// Aggregate the raw trace data
 	hops := tracelib.AggregateMulti(rawHops)
 
+	// Prepare the final result in a suitable format for JSON output
 	result := make([][]mtrhHost, 0, len(hops))
-
 	for _, hop := range hops {
 		nextSlice := make([]mtrhHost, 0, len(hop))
-
 		for _, h := range hop {
-			if nil == h.Addr {
+			// Skip if no address was returned for this hop
+			if h.Addr == nil {
 				continue
 			}
-			next := mtrhHost{}
-			next.AS = h.AS
-			next.IP = h.Addr.String()
-			next.Host = h.Host
-			next.Avg = fmt.Sprintf("%.2f", float64(h.AvgRTT)/float64(time.Millisecond))
-			next.Max = fmt.Sprintf("%.2f", float64(h.MaxRTT)/float64(time.Millisecond))
-			next.Min = fmt.Sprintf("%.2f", float64(h.MinRTT)/float64(time.Millisecond))
+			// Prepare hop data for output
+			next := mtrhHost{
+				AS:   h.AS,
+				IP:   h.Addr.String(),
+				Host: h.Host,
+				Avg:  fmt.Sprintf("%.2f", float64(h.AvgRTT)/float64(time.Millisecond)),
+				Max:  fmt.Sprintf("%.2f", float64(h.MaxRTT)/float64(time.Millisecond)),
+				Min:  fmt.Sprintf("%.2f", float64(h.MinRTT)/float64(time.Millisecond)),
+			}
+			// Calculate received packet percentage
 			if h.Total == 0 {
 				next.Rcvd = 0
 			} else {
@@ -51,25 +69,23 @@ func doTrace(host string) ([]byte, error) {
 			}
 			nextSlice = append(nextSlice, next)
 		}
-
 		result = append(result, nextSlice)
 	}
 
+	// Marshal result into JSON
 	out, err := json.MarshalIndent(result, "", "  ")
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
-
 	return out, nil
 }
 
 func main() {
-
-	j, err := doTrace("homebeat.live")
-
-	if nil != err {
-		log.Fatalln("Error: ", err)
+	// Perform the trace and get the JSON result
+	j, err := doTrace("google.com")
+	if err != nil {
+		log.Fatalln("Error:", err)
 	}
-
+	// Print the formatted JSON output
 	fmt.Println(string(j))
 }
